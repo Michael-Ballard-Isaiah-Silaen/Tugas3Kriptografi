@@ -7,6 +7,7 @@ const InputPassword = ({
   onChange,
   value,
   id,
+  required,
 }: {
   name: string;
   className?: string;
@@ -14,6 +15,7 @@ const InputPassword = ({
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   value: string;
   id?: string;
+  required?: boolean;
 }) => {
   return (
     <input
@@ -24,6 +26,7 @@ const InputPassword = ({
       placeholder={placeholder || name}
       value={value}
       onChange={onChange}
+      required={required}
       className={twMerge("w-full rounded-md border-[1px] px-2 py-1", className)}
     />
   );

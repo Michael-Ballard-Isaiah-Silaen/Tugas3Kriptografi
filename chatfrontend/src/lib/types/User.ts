@@ -7,6 +7,5 @@ export interface IUser{
 export interface IUserForm{
   email?: string;
   password?: string;
-  firstname?: string;
-  lastname?: string;
+  username?: string;
 }

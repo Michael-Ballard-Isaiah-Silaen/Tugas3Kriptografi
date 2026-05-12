@@ -8,10 +8,7 @@ class AuthController{
     try{
       const {email, password, username, publicKey, encryptedPrivateKey, salt} = req.body;
       if (!email || !password || !username || !publicKey || !encryptedPrivateKey || !salt){
-        throw {
-            name: "BadRequest", 
-            message: "Email, password, username, publicKey, encryptedPrivateKey, and salt are required"
-        };
+        throw {name: "BadRequest", message: "Email, password, username, publicKey, encryptedPrivateKey, and salt is required"};
       }
       const existingUser = await User.findOne({email});
       if (existingUser){
@@ -19,12 +16,12 @@ class AuthController{
       }
       const hashedPassword = getHashedString(password);
       const result = await User.create({
-          email, 
-          password: hashedPassword, 
-          username,
-          publicKey,
-          encryptedPrivateKey,
-          salt
+        email, 
+        password: hashedPassword, 
+        username,
+        publicKey,
+        encryptedPrivateKey,
+        salt
       });
       res.status(201).json({ 
         message: "User registered successfully", 
@@ -34,19 +31,22 @@ class AuthController{
       next(error);
     }
   }
-  
   static async login(req, res, next){
     try{
       const {email, password} = req.body;
       if (!email || !password){
         throw {name: "BadRequest", message: "Email and password is required"};
       }
-      const user = await User.findOne({email});
+      const user = await User.findOne({ email });
       if (!user) throw {name: "Unauthorized", message: "Invalid email or password"};
       const isPasswordValid = isStringRelevant(password, user.password); 
       if (!isPasswordValid) throw {name: "Unauthorized", message: "Invalid email or password"};
       const access_token = getToken({id: user._id, email: user.email, username: user.username});
-      res.status(200).json({access_token});
+      res.status(200).json({
+        access_token,
+        encryptedPrivateKey: user.encryptedPrivateKey,
+        salt: user.salt
+      });
     } catch (error){
       next(error);
     }

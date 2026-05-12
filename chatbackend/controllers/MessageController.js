@@ -5,10 +5,10 @@ const {ObjectId} = require("mongodb");
 class MessageController{
   static async createMessage(req, res, next){
     try{
-      const {chatId, content} = req.body;
-      const senderId = req.user.id; 
-      if (!chatId || !content){
-        throw {name: "BadRequest", message: "chatId and content is required"};
+      const {chatId, ciphertext, iv, mac} = req.body;
+      const senderId = req.user.id;
+      if (!chatId || !ciphertext || !iv){
+        throw {name: "BadRequest", message: "chatId, ciphertext, and iv are required"};
       }
       const chatCollection = await Chat.collection();
       const chat = await chatCollection.findOne({
@@ -21,7 +21,9 @@ class MessageController{
       const result = await Message.create({ 
         chatId, 
         senderId, 
-        content 
+        ciphertext,
+        iv,
+        mac
       });
       res.status(201).json({ 
         message: "Message sent", 
@@ -31,6 +33,7 @@ class MessageController{
       next(error);
     }
   }
+  
   static async getMessages(req, res, next){
     try{
       const {chatId} = req.params;

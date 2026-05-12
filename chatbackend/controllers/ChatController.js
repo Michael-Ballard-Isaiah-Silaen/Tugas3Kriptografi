@@ -15,7 +15,7 @@ class ChatController{
         chatId: result.insertedId 
       });
     } catch (error){
-      if (error.message === "Chat already exists"){
+      if (error.message === "Chat exists"){
         return res.status(400).json({ message: "Chat already exists" });
       }
       next(error);
@@ -39,11 +39,30 @@ class ChatController{
         },
         {
           $project: {
-            "participants.password": 0
+            "participants.password": 0,
+            "participants.encryptedPrivateKey": 0,
+            "participants.salt": 0
           }
         }
       ]).toArray();
       res.status(200).json(chats);
+    } catch (error){
+      next(error);
+    }
+  }
+  static async getChatById(req, res, next){
+    try{
+      const {chatId} = req.params;
+      const currentUserId = req.user.id;
+      const collection = await Chat.collection();
+      const chat = await collection.findOne({ 
+        _id: new ObjectId(chatId),
+        participants: new ObjectId(currentUserId)
+      });
+      if (!chat){
+        throw { name: "NotFound", message: "Chat not found or unauthorized" };
+      }
+      res.status(200).json(chat);
     } catch (error){
       next(error);
     }

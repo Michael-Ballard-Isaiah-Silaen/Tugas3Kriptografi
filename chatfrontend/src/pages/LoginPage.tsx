@@ -8,6 +8,7 @@ import CustomAxios from "../lib/actions/CustomAxios";
 import {IUserForm} from "../lib/types/User";
 import {CurrentUserContext} from "../lib/contexts/CurrentUserContext";
 
+const toBase64 = (buffer: ArrayBuffer) => window.btoa(String.fromCharCode(...new Uint8Array(buffer)));
 const fromBase64 = (base64: string) => Uint8Array.from(window.atob(base64), c => c.charCodeAt(0));
 async function decryptUserPrivateKey(password: string, saltB64: string, encryptedKeyJsonStr: string) {
   const enc = new TextEncoder();
@@ -68,6 +69,7 @@ const LoginPage = () => {
         salt, 
         encryptedPrivateKey
       );
+      sessionStorage.setItem("decrypted_private_key",toBase64(decryptedPrivKeyBuffer));
       localStorage.setItem("access_token", access_token);
       const userInfoResponse = await CustomAxios("get", "/auth/user-info", {
         headers: { Authorization: `Bearer ${access_token}` }

@@ -14,8 +14,20 @@ export const CurrentUserContext = createContext<
   CurrentUserContextType | undefined
 >(undefined);
 
-interface CurrentUserProviderProps {
+interface CurrentUserProviderProps{
   children: ReactNode;
+}
+
+function restorePrivateKey(): ArrayBuffer | undefined{
+  const stored = sessionStorage.getItem("decrypted_private_key");
+  if (!stored) return undefined;
+  try{
+    const bytes = Uint8Array.from(window.atob(stored), (c) => c.charCodeAt(0));
+    return bytes.buffer;
+  } catch{
+    sessionStorage.removeItem("decrypted_private_key");
+    return undefined;
+  }
 }
 
 export const CurrentUserProvider: React.FC<CurrentUserProviderProps> = ({
@@ -35,9 +47,12 @@ export const CurrentUserProvider: React.FC<CurrentUserProviderProps> = ({
             },
           },
         );
-        setCurrentUser(user);
+        const decryptedPrivateKey = restorePrivateKey();
+        setCurrentUser({...user, decryptedPrivateKey});
       }
     } catch (error){
+      localStorage.removeItem("access_token");
+      sessionStorage.removeItem("decrypted_private_key");
       navigate("/auth/sign-in");
       console.error(error);
     }

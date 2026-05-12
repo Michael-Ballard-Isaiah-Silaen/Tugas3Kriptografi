@@ -6,7 +6,7 @@ export const handleFetchError = async (error: unknown) => {
     Swal.fire({
       icon: "error",
       title: "Oopsie...",
-      text: error.response?.data,
+      text: error.response?.data?.message || "An unexpected error occurred",
     });
     return;
   }

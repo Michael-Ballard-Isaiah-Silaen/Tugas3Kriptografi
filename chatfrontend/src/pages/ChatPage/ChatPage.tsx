@@ -6,6 +6,7 @@ import {IMessage} from "../../lib/types/Message";
 
 const toBase64 = (buffer: ArrayBuffer) => window.btoa(String.fromCharCode(...new Uint8Array(buffer)));
 const fromBase64 = (base64: string) => Uint8Array.from(window.atob(base64), c => c.charCodeAt(0));
+
 async function importPublicKey(base64Key: string){
   return await window.crypto.subtle.importKey(
     "spki",
@@ -33,24 +34,35 @@ async function calculateSharedSecret(myPrivateKey: CryptoKey, opponentPublicKey:
 }
 async function deriveAESKeyHKDF(sharedSecretBits: ArrayBuffer){
   const hkdfKeyMaterial = await window.crypto.subtle.importKey(
-    "raw",
-    sharedSecretBits,
-    {name: "HKDF"},
-    false,
-    ["deriveKey"]
+    "raw", sharedSecretBits, {name: "HKDF"}, false, ["deriveKey"]
   );
   return await window.crypto.subtle.deriveKey(
     {
-      name: "HKDF",
-      hash: "SHA-256",
-      salt: new Uint8Array(), 
-      info: new Uint8Array(), 
+      name: "HKDF", hash: "SHA-256", salt: new Uint8Array(), info: new Uint8Array(), 
     },
     hkdfKeyMaterial,
     {name: "AES-GCM", length: 256},
-    false,
-    ["encrypt", "decrypt"]
+    false, ["encrypt", "decrypt"]
   );
+}
+async function deriveMACKeyHKDF(sharedSecretBits: ArrayBuffer){
+  const hkdfKeyMaterial = await window.crypto.subtle.importKey(
+    "raw", sharedSecretBits, {name: "HKDF"}, false, ["deriveKey"]
+  );
+  return await window.crypto.subtle.deriveKey(
+    {
+      name: "HKDF", hash: "SHA-256", salt: new Uint8Array(), info: new TextEncoder().encode("mac-key"),
+    },
+    hkdfKeyMaterial,
+    {name: "HMAC", hash: "SHA-256", length: 256},
+    false, ["sign", "verify"]
+  );
+}
+async function calculateMAC(ciphertextB64: string, ivB64: string, key: CryptoKey){
+  const data = ciphertextB64 + ivB64;
+  const encoded = new TextEncoder().encode(data);
+  const signature = await window.crypto.subtle.sign("HMAC", key, encoded);
+  return toBase64(signature);
 }
 async function encryptMessageText(text: string, key: CryptoKey){
   const encoded = new TextEncoder().encode(text);
@@ -81,8 +93,9 @@ export default function ChatPage(){
   const [messages, setMessages] = useState<IMessage[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
-  const [sharedKey, setSharedKey] = useState<CryptoKey | null>(null); 
+  const [sharedKeys, setSharedKeys] = useState<{aes: CryptoKey, mac: CryptoKey} | null>(null); 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const setupKeys = async () => {
       try{
@@ -100,7 +113,8 @@ export default function ChatPage(){
         const opponentPubKey = await importPublicKey(opponentData.publicKey);
         const sharedSecret = await calculateSharedSecret(myPrivKey, opponentPubKey);
         const aesKey = await deriveAESKeyHKDF(sharedSecret);
-        setSharedKey(aesKey);
+        const macKey = await deriveMACKeyHKDF(sharedSecret);
+        setSharedKeys({aes: aesKey, mac: macKey});
       } catch (error){
         console.error("Key exchange failed:", error);
         alert("Secure key exchange failed.");
@@ -115,23 +129,33 @@ export default function ChatPage(){
   useEffect(() => {
     let intervalId: ReturnType<typeof setInterval>;
     const fetchAndDecryptMessages = async (isInitialFetch = false) => {
-      if (!sharedKey) return;
+      if (!sharedKeys) return;
       try{
         const {data} = await CustomAxios("get", `/messages/${chatId}`);
         const decryptedMessages: IMessage[] = await Promise.all(
           data.map(async (msg: IMessage) => {
             try{
-              const plainText = await decryptMessageText(msg.ciphertext, msg.iv, sharedKey);
+              if (!msg.mac) throw new Error("Missing MAC");
+              const expectedMac = await calculateMAC(msg.ciphertext, msg.iv, sharedKeys.mac);
+              if (expectedMac !== msg.mac){
+                return {
+                  ...msg, 
+                  decryptedContent: "MAC Verification Failed", 
+                  decryptionFailed: true
+                };
+              }
+              const plainText = await decryptMessageText(msg.ciphertext, msg.iv, sharedKeys.aes);
               return {...msg, decryptedContent: plainText, decryptionFailed: false};
-            } catch (err){
-              return {...msg, decryptedContent: "[Encrypted Message / Decryption Failed]", decryptionFailed: true};
+            } catch (err: any){
+              const errorText = err.message === "Missing MAC" ? "Missing MAC" : "[Encrypted Message / Decryption Failed]";
+              return {...msg, decryptedContent: errorText, decryptionFailed: true};
             }
           })
         );
         setMessages((prev) => {
           if (prev.length === decryptedMessages.length){
             if (prev.length === 0) return prev;
-            if (prev[prev.length - 1]._id === decryptedMessages[decryptedMessages.length - 1]._id) {
+            if (prev[prev.length - 1]._id === decryptedMessages[decryptedMessages.length - 1]._id){
               return prev;
             }
           }
@@ -139,7 +163,7 @@ export default function ChatPage(){
         });
       } catch (error){
         console.error("Failed to fetch messages", error);
-        if (isInitialFetch) {
+        if (isInitialFetch){
           alert("Unable to load conversation or unauthorized.");
           navigate("/contacts");
         }
@@ -150,20 +174,23 @@ export default function ChatPage(){
     fetchAndDecryptMessages(true);
     intervalId = setInterval(() => fetchAndDecryptMessages(false), 1000);
     return () => clearInterval(intervalId);
-  }, [chatId, navigate, sharedKey]);
+  }, [chatId, navigate, sharedKeys]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({behavior: "smooth"});
   }, [messages]);
 
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !currentUser || !sharedKey) return;
+    if (!newMessage.trim() || !currentUser || !sharedKeys) return;
     try{
-      const {ciphertext, iv} = await encryptMessageText(newMessage, sharedKey);
+      const {ciphertext, iv} = await encryptMessageText(newMessage, sharedKeys.aes);
+      const mac = await calculateMAC(ciphertext, iv, sharedKeys.mac);
       const {data} = await CustomAxios("post", "/messages", {
         chatId,
         ciphertext,
-        iv
+        iv,
+        mac
       });
       const newMsgObj: IMessage = {
         _id: data.messageId,
@@ -171,10 +198,11 @@ export default function ChatPage(){
         senderId: currentUser._id,
         ciphertext,
         iv,
+        mac,
         timestamp: new Date().toISOString(),
         decryptedContent: newMessage, 
         decryptionFailed: false
-      }
+      };
       setMessages((prev) => [...prev, newMsgObj]);
       setNewMessage("");
     } catch (error){
@@ -212,7 +240,7 @@ export default function ChatPage(){
                     isMe 
                       ? "bg-blue-600 text-white rounded-br-none" 
                       : "bg-white border text-gray-800 rounded-bl-none shadow-sm"
-                  } ${msg.decryptionFailed ? "border-red-500 bg-red-100 text-red-700" : ""}`}
+                  } ${msg.decryptionFailed ? "border-red-500 bg-red-100 text-red-700 font-semibold" : ""}`}
                 >
                   {msg.decryptedContent}
                 </div>

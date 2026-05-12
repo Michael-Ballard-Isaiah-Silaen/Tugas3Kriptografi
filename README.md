@@ -9,6 +9,7 @@ Aplikasi dibangun dengan stack MERN (MongoDB, Express, React, Node).
 Sebelum memakai aplikasi, pastikan perangkat sudah memiliki:
 1. MongoDB: https://www.mongodb.com/docs/manual/installation/
 2. Node Packet Manager (npm): https://docs.npmjs.com/downloading-and-installing-node-js-and-npm/
+3. Docker: https://docs.docker.com/engine/install/
 
 # Installation/Configuration
 1. Pastikan semua dependensi berjalan (terutama pastikan MongoDB berjalan)

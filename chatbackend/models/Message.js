@@ -2,18 +2,20 @@ const {ObjectId} = require("mongodb");
 const {getDatabase} = require("../config/MongoConnect");
 
 class Message {
-  constructor({_id, chatId, senderId, content, timestamp}){
-    Object.assign(this, {_id, chatId, senderId, content, timestamp});
+  constructor({_id, chatId, senderId, ciphertext, iv, mac, timestamp}){
+    Object.assign(this, {_id, chatId, senderId, ciphertext, iv, mac, timestamp});
   }
   static async collection(){
     return getDatabase().collection("Messages");
   }
-  static async create({chatId, senderId, content}){
+  static async create({chatId, senderId, ciphertext, iv, mac}){
     const collection = await Message.collection();
     const result = await collection.insertOne({
       chatId: new ObjectId(chatId),
       senderId: new ObjectId(senderId),
-      content,
+      ciphertext: ciphertext,
+      iv: iv,
+      mac: mac || null,
       timestamp: new Date(),
     });
     return result;

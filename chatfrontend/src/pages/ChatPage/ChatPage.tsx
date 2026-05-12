@@ -62,7 +62,7 @@ async function encryptMessageText(text: string, key: CryptoKey){
   );
   return {ciphertext: toBase64(ciphertextBuffer), iv: toBase64(iv)};
 }
-async function decryptMessageText(ciphertextB64: string, ivB64: string, key: CryptoKey) {
+async function decryptMessageText(ciphertextB64: string, ivB64: string, key: CryptoKey){
   const ciphertext = fromBase64(ciphertextB64);
   const iv = fromBase64(ivB64);
   const decryptedBuffer = await window.crypto.subtle.decrypt(
@@ -85,9 +85,9 @@ export default function ChatPage(){
   const messagesEndRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const setupKeys = async () => {
-      try {
+      try{
         if (!currentUser) return;
-        if (!currentUser.decryptedPrivateKey) {
+        if (!currentUser.decryptedPrivateKey){
           alert("Session secured parameters lost because you reload the page. Please login again to decrypt your private key.");
           navigate("/auth/sign-in");
           return;
@@ -101,19 +101,20 @@ export default function ChatPage(){
         const sharedSecret = await calculateSharedSecret(myPrivKey, opponentPubKey);
         const aesKey = await deriveAESKeyHKDF(sharedSecret);
         setSharedKey(aesKey);
-      } catch (error) {
+      } catch (error){
         console.error("Key exchange failed:", error);
         alert("Secure key exchange failed.");
         navigate("/contacts");
       }
     };
-    if (chatId) {
+    if (chatId){
       setupKeys();
     }
   }, [chatId, currentUser, navigate]);
 
   useEffect(() => {
-    const fetchAndDecryptMessages = async () => {
+    let intervalId: ReturnType<typeof setInterval>;
+    const fetchAndDecryptMessages = async (isInitialFetch = false) => {
       if (!sharedKey) return;
       try{
         const {data} = await CustomAxios("get", `/messages/${chatId}`);
@@ -127,16 +128,28 @@ export default function ChatPage(){
             }
           })
         );
-        setMessages(decryptedMessages);
+        setMessages((prev) => {
+          if (prev.length === decryptedMessages.length){
+            if (prev.length === 0) return prev;
+            if (prev[prev.length - 1]._id === decryptedMessages[decryptedMessages.length - 1]._id) {
+              return prev;
+            }
+          }
+          return decryptedMessages;
+        });
       } catch (error){
         console.error("Failed to fetch messages", error);
-        alert("Unable to load conversation or unauthorized.");
-        navigate("/contacts");
+        if (isInitialFetch) {
+          alert("Unable to load conversation or unauthorized.");
+          navigate("/contacts");
+        }
       } finally{
         setLoading(false);
       }
     };
-    fetchAndDecryptMessages();
+    fetchAndDecryptMessages(true);
+    intervalId = setInterval(() => fetchAndDecryptMessages(false), 1000);
+    return () => clearInterval(intervalId);
   }, [chatId, navigate, sharedKey]);
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({behavior: "smooth"});
@@ -170,7 +183,6 @@ export default function ChatPage(){
     }
   };
   if (loading) return <div className="flex justify-center p-10 mt-20">Establishing secure connection & loading messages...</div>;
-
   return (
     <div className="mt-20 max-w-3xl mx-auto p-4 h-[calc(100vh-80px)] flex flex-col">
       <div className="bg-white border-b p-4 flex items-center shadow-sm rounded-t-lg">

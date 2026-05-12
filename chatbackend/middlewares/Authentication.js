@@ -1,32 +1,25 @@
-const { ObjectId } = require("mongodb");
-const { getPayload } = require("../helpers/jwt");
+const {getPayload} = require("../helpers/jwt");
 const User = require("../models/User");
-const { JsonWebTokenError } = require("jsonwebtoken");
-const { CustomError } = require("./ErrorHandler");
+const {ObjectId} = require("mongodb");
 
-const Authentication = async (req, res, next) => {
+async function Authentication(req, res, next) {
   try{
-    const accessToken = req.headers.access_token;
-    if (!accessToken) throw new CustomError(403, "Please re-login");
-    const payload = getPayload(accessToken);
-    if (!payload) throw new CustomError(403, "Please re-login");
-    const { id, email } = payload;
-    if (!id || !email) throw new CustomError(403, "Please re-login");
-    const existingUser = await User.findOne({ _id: new ObjectId(id), email });
-    if (!existingUser){
-      throw new CustomError(403, "Please re-login");
+    const {authorization} = req.headers;
+    if (!authorization) throw {name: "Unauthorized", message: "Go login"};
+    const access_token = authorization.split(" ")[1];
+    let payload;
+    try{
+      payload = getPayload(access_token); 
+    } catch (err){
+      throw {name: "Unauthorized", message: err.message || "Invalid Token"};
     }
-    req.user = { 
-      id: existingUser._id.toString(), 
-      ...existingUser 
-    };
+    const user = await User.findOne({_id: new ObjectId(payload.id)});
+    if (!user) throw {name: "Unauthorized", message: "User doesn't exist"};
+    req.user = {id: user._id, email: user.email, username: user.username};
     next();
-  }catch (error){
-    if (error instanceof JsonWebTokenError){
-      error = new CustomError(403, "Please re-login");
-    }
+  } catch (error){
     next(error);
   }
-};
+}
 
 module.exports = Authentication;

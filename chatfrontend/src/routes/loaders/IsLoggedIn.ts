@@ -13,7 +13,7 @@ const IsLoggedIn = async () => {
       `${BACKEND_BASE_URL}/auth/user-info`,
       {
         headers:{
-          access_token: token,
+          Authorization: `Bearer ${token}`,
         },
       },
     );

@@ -6,9 +6,10 @@ const CustomAxios = (
   pathUrl: string,
   formData?: unknown,
 ) => {
+  const token = localStorage.getItem("access_token");
   const headers = {
-    headers:{
-      access_token: localStorage.getItem("access_token") || "",
+    headers: {
+      Authorization: token ? `Bearer ${token}` : "",
     },
   };
 

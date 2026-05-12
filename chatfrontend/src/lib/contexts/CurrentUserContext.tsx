@@ -25,12 +25,13 @@ export const CurrentUserProvider: React.FC<CurrentUserProviderProps> = ({
   const [currentUser, setCurrentUser] = useState<IUser | null>(null);
   const fetchUser = async (accessToken?: string) => {
     try{
-      if (accessToken || localStorage.getItem("access_token")) {
+      const token = accessToken || localStorage.getItem("access_token");
+      if (token) {
         const {data: user} = await axios.get<IUser>(
           BACKEND_BASE_URL + "/auth/user-info",
           {
-            headers:{
-              access_token: accessToken || localStorage.getItem("access_token"),
+            headers: {
+              Authorization: `Bearer ${token}`,
             },
           },
         );

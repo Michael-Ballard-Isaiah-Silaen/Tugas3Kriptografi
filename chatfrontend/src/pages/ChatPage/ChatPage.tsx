@@ -124,7 +124,7 @@ export default function ChatPage(){
               const plainText = await decryptMessageText(msg.ciphertext, msg.iv, sharedKey);
               return {...msg, decryptedContent: plainText, decryptionFailed: false};
             } catch (err){
-              return {...msg, decryptedContent: "⚠️ [Encrypted Message / Decryption Failed]", decryptionFailed: true};
+              return {...msg, decryptedContent: "[Encrypted Message / Decryption Failed]", decryptionFailed: true};
             }
           })
         );

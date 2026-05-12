@@ -1,21 +1,31 @@
 const User = require("../models/User");
-const {isStringRelevant} = require("../helpers/bcrypt");
+const {isStringRelevant, getHashedString} = require("../helpers/bcrypt");
 const {getToken} = require("../helpers/jwt");
 const {ObjectId} = require("mongodb");
 
 class AuthController{
   static async register(req, res, next){
     try{
-      const {email, password, username} = req.body;
-      if (!email || !password || !username){
-        throw {name: "BadRequest", message: "Email, password, and username is required"};
+      const {email, password, username, publicKey, encryptedPrivateKey, salt} = req.body;
+      if (!email || !password || !username || !publicKey || !encryptedPrivateKey || !salt){
+        throw {
+            name: "BadRequest", 
+            message: "Email, password, username, publicKey, encryptedPrivateKey, and salt are required"
+        };
       }
       const existingUser = await User.findOne({email});
       if (existingUser){
         throw {name: "BadRequest", message: "Email is already registered"};
       }
       const hashedPassword = getHashedString(password);
-      const result = await User.create({email, password: hashedPassword, username});
+      const result = await User.create({
+          email, 
+          password: hashedPassword, 
+          username,
+          publicKey,
+          encryptedPrivateKey,
+          salt
+      });
       res.status(201).json({ 
         message: "User registered successfully", 
         userId: result.insertedId 
@@ -24,13 +34,14 @@ class AuthController{
       next(error);
     }
   }
+  
   static async login(req, res, next){
     try{
       const {email, password} = req.body;
       if (!email || !password){
         throw {name: "BadRequest", message: "Email and password is required"};
       }
-      const user = await User.findOne({ email });
+      const user = await User.findOne({email});
       if (!user) throw {name: "Unauthorized", message: "Invalid email or password"};
       const isPasswordValid = isStringRelevant(password, user.password); 
       if (!isPasswordValid) throw {name: "Unauthorized", message: "Invalid email or password"};
